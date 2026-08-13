@@ -1,0 +1,67 @@
+services:
+  agent-core:
+    build: ./services/agent-core
+    ports:
+      - "8080:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      AUDIT_LOG_PATH: "/data/audit.log"
+      # SEED_OPERATOR_KEY / SEED_ADMIN_KEY: dev-only bootstrap keys.
+      # Real key issuance/rotation lands with the RBAC persistence work.
+      SEED_OPERATOR_KEY: ${SEED_OPERATOR_KEY:-dev-operator-key}
+      SEED_ADMIN_KEY: ${SEED_ADMIN_KEY:-dev-admin-key}
+      # LLM_BASE_URL / LLM_MODEL: deployment-specific (the real vLLM
+      # server's address), left unset here on purpose — see
+      # docker-compose's "gpu" profile below and TZ 7.2. Without them,
+      # agent-core falls back to StaticPlanner.
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      RAG_SERVICE_URL: "http://rag-service:8000"
+    volumes:
+      - audit-log:/data
+    depends_on:
+      - rag-service
+
+  rag-service:
+    build: ./services/rag-service
+    environment:
+      CHROMA_DB_PATH: "/data/chroma_db"
+    volumes:
+      # Pentest knowledge base (TZ 8-bo'lim) — not part of the repo (like
+      # the LLM's model weights), the operator places the pre-built
+      # Chroma DB here. See services/rag-service and RAG_QOLLANMA.md for
+      # how it's produced. Read-write: Chroma's SQLite backend can need
+      # to write WAL/lock files even for query-only workloads.
+      - ./services/rag-service/chroma_db:/data/chroma_db
+
+  web-ui:
+    build: ./web-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      - agent-core
+
+  # vLLM model-serving placeholder for TZ 7.2 (Qwen 3.6 27B on 2x RTX 4090).
+  # Only meant to run on the client's real GPU server, not in the default
+  # `docker compose up`. Enable explicitly with:
+  #   docker compose --profile gpu up
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles: ["gpu"]
+    command:
+      - "--model=/models/qwen-3.6-27b"
+      - "--tensor-parallel-size=2"
+    volumes:
+      - ./models:/models
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+
+volumes:
+  audit-log:

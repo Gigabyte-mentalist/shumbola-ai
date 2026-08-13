@@ -1,0 +1,35 @@
+# Go
+services/agent-core/bin/
+*.test
+*.out
+
+# Node / web-ui
+web-ui/node_modules/
+web-ui/dist/
+web-ui/.vite/
+
+# Env / secrets
+.env
+*.env.local
+
+# Audit log / runtime data
+data/
+*.audit.log
+
+# Python
+__pycache__/
+*.pyc
+
+# RAG knowledge base data (large binary vector DB, not source — like the
+# LLM model weights, this is operator-provided data, not committed)
+services/rag-service/chroma_db/
+services/rag-service/data/
+/chroma_db/
+/final_chunks.jsonl
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
